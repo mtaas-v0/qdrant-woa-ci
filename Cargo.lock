@@ -3776,6 +3776,7 @@ dependencies = [
  "bytes",
  "common",
  "futures",
+ "log",
  "slab",
  "tempfile",
  "tokio",
