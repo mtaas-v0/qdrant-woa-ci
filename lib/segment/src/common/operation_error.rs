@@ -275,6 +275,7 @@ impl From<GridstoreError> for OperationError {
                 Self::service_error(err.to_string())
             }
             GridstoreError::ValidationError { message } => Self::validation_error(message),
+            GridstoreError::UnsupportedOperation { .. } => Self::service_error(err.to_string()),
             GridstoreError::UniversalIo(err) => {
                 Self::service_error(format!("Gridstore IO error: {err}"))
             }
