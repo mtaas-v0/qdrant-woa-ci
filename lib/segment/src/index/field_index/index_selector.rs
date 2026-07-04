@@ -23,13 +23,13 @@ use crate::index::field_index::null_index::MutableNullIndex;
 use crate::index::field_index::numeric_index::{NumericIndex, NumericIndexValue};
 use crate::index::payload_config::{FullPayloadIndexType, IndexMutability, PayloadIndexType};
 use crate::json_path::JsonPath;
-use crate::types::{PayloadFieldSchema, PayloadSchemaParams};
+use crate::types::{Memory, PayloadFieldSchema, PayloadSchemaParams};
 
 /// Selects index and index builder types based on field type.
 #[derive(Copy, Clone)]
 pub enum IndexSelector<'a> {
     /// On disk or in-memory index on mmaps, non-appendable
-    NonAppendable { dir: &'a Path, is_on_disk: bool },
+    NonAppendable { dir: &'a Path, memory: Memory },
     /// In-memory index on gridstore, appendable
     Appendable { dir: &'a Path },
 }
@@ -291,8 +291,8 @@ impl IndexSelector<'_> {
         Vec<<N as MapIndexKey>::Owned>: Blob + Send + Sync,
     {
         Ok(match self {
-            IndexSelector::NonAppendable { dir, is_on_disk } => {
-                MapIndex::new_immutable(&map_dir(dir, field), *is_on_disk, deleted_points)?
+            IndexSelector::NonAppendable { dir, memory } => {
+                MapIndex::new_immutable(&map_dir(dir, field), *memory, deleted_points)?
             }
             IndexSelector::Appendable { dir } => {
                 MapIndex::new_mutable(map_dir(dir, field), create_if_missing)?
@@ -311,9 +311,11 @@ impl IndexSelector<'_> {
         Vec<<N as MapIndexKey>::Owned>: Blob + Send + Sync,
     {
         match self {
-            IndexSelector::NonAppendable { dir, is_on_disk } => make_mmap(
-                MapIndex::builder_immutable(&map_dir(dir, field), *is_on_disk, deleted_points),
-            ),
+            IndexSelector::NonAppendable { dir, memory } => make_mmap(MapIndex::builder_immutable(
+                &map_dir(dir, field),
+                !memory.is_heap(),
+                deleted_points,
+            )),
             IndexSelector::Appendable { dir } => {
                 make_gridstore(MapIndex::builder_mutable(map_dir(dir, field)))
             }
@@ -330,8 +332,8 @@ impl IndexSelector<'_> {
         Vec<T>: Blob,
     {
         Ok(match self {
-            IndexSelector::NonAppendable { dir, is_on_disk } => {
-                NumericIndex::new_immutable(&numeric_dir(dir, field), *is_on_disk, deleted_points)?
+            IndexSelector::NonAppendable { dir, memory } => {
+                NumericIndex::new_immutable(&numeric_dir(dir, field), *memory, deleted_points)?
             }
             IndexSelector::Appendable { dir } => {
                 NumericIndex::new_mutable(numeric_dir(dir, field), create_if_missing)?
@@ -351,9 +353,11 @@ impl IndexSelector<'_> {
         Vec<T>: Blob,
     {
         match self {
-            IndexSelector::NonAppendable { dir, is_on_disk } => make_mmap(
-                NumericIndex::builder_mmap(&numeric_dir(dir, field), *is_on_disk, deleted_points),
-            ),
+            IndexSelector::NonAppendable { dir, memory } => make_mmap(NumericIndex::builder_mmap(
+                &numeric_dir(dir, field),
+                !memory.is_heap(),
+                deleted_points,
+            )),
             IndexSelector::Appendable { dir } => {
                 make_gridstore(NumericIndex::builder_gridstore(numeric_dir(dir, field)))
             }
@@ -367,8 +371,8 @@ impl IndexSelector<'_> {
         deleted_points: &BitSlice,
     ) -> OperationResult<Option<GeoIndex>> {
         Ok(match self {
-            IndexSelector::NonAppendable { dir, is_on_disk } => {
-                GeoIndex::new_immutable(&map_dir(dir, field), *is_on_disk, deleted_points)?
+            IndexSelector::NonAppendable { dir, memory } => {
+                GeoIndex::new_immutable(&map_dir(dir, field), *memory, deleted_points)?
             }
             IndexSelector::Appendable { dir } => {
                 GeoIndex::new_mutable(map_dir(dir, field), create_if_missing)?
@@ -384,9 +388,9 @@ impl IndexSelector<'_> {
         deleted_points: &BitSlice,
     ) -> FieldIndexBuilder {
         match self {
-            IndexSelector::NonAppendable { dir, is_on_disk } => make_mmap(GeoIndex::builder_mmap(
+            IndexSelector::NonAppendable { dir, memory } => make_mmap(GeoIndex::builder_mmap(
                 &map_dir(dir, field),
-                *is_on_disk,
+                !memory.is_heap(),
                 deleted_points,
             )),
             IndexSelector::Appendable { dir } => {
@@ -400,10 +404,7 @@ impl IndexSelector<'_> {
     /// Gridstore segments are appendable/mutable.
     pub fn default_mutability(&self) -> IndexMutability {
         match self {
-            IndexSelector::NonAppendable {
-                dir: _,
-                is_on_disk: _,
-            } => IndexMutability::Immutable,
+            IndexSelector::NonAppendable { dir: _, memory: _ } => IndexMutability::Immutable,
             IndexSelector::Appendable { dir: _ } => IndexMutability::Mutable,
         }
     }
@@ -414,7 +415,7 @@ impl IndexSelector<'_> {
         total_point_count: usize,
     ) -> OperationResult<FieldIndexBuilder> {
         let builder = match self {
-            IndexSelector::NonAppendable { dir, is_on_disk: _ } => {
+            IndexSelector::NonAppendable { dir, memory: _ } => {
                 FieldIndexBuilder::ImmutableNullIndex(ImmutableNullIndex::builder(
                     &null_dir(dir, field),
                     total_point_count,
@@ -440,7 +441,7 @@ impl IndexSelector<'_> {
         // Gridstore segments are always appendable, so the null index is
         // always mutable regardless of the stored mutability marker.
         match (self, mutability) {
-            (IndexSelector::NonAppendable { dir, is_on_disk: _ }, IndexMutability::Immutable) => {
+            (IndexSelector::NonAppendable { dir, memory: _ }, IndexMutability::Immutable) => {
                 Ok(ImmutableNullIndex::open(
                     &null_dir(dir, field),
                     total_point_count,
@@ -449,7 +450,7 @@ impl IndexSelector<'_> {
                 .map(NullIndex::Immutable)
                 .map(FieldIndex::NullIndex))
             }
-            (IndexSelector::NonAppendable { dir, is_on_disk: _ }, IndexMutability::Mutable)
+            (IndexSelector::NonAppendable { dir, memory: _ }, IndexMutability::Mutable)
             | (IndexSelector::Appendable { dir }, IndexMutability::Mutable)
             | (IndexSelector::Appendable { dir }, IndexMutability::Immutable) => {
                 Ok(MutableNullIndex::open(
@@ -471,8 +472,8 @@ impl IndexSelector<'_> {
         deleted_points: &BitSlice,
     ) -> OperationResult<Option<FullTextIndex>> {
         Ok(match self {
-            IndexSelector::NonAppendable { dir, is_on_disk } => {
-                FullTextIndex::new_mmap(text_dir(dir, field), config, *is_on_disk, deleted_points)?
+            IndexSelector::NonAppendable { dir, memory } => {
+                FullTextIndex::new_mmap(text_dir(dir, field), config, *memory, deleted_points)?
             }
             IndexSelector::Appendable { dir } => {
                 FullTextIndex::new_gridstore(text_dir(dir, field), config, create_if_missing)?
@@ -487,11 +488,11 @@ impl IndexSelector<'_> {
         deleted_points: &BitSlice,
     ) -> FieldIndexBuilder {
         match self {
-            IndexSelector::NonAppendable { dir, is_on_disk } => {
+            IndexSelector::NonAppendable { dir, memory } => {
                 FieldIndexBuilder::FullTextMmapIndex(FullTextIndex::builder_mmap(
                     text_dir(dir, field),
                     config,
-                    *is_on_disk,
+                    !memory.is_heap(),
                     deleted_points,
                 ))
             }
@@ -503,7 +504,7 @@ impl IndexSelector<'_> {
 
     fn bool_builder(&self, field: &JsonPath) -> OperationResult<FieldIndexBuilder> {
         match self {
-            IndexSelector::NonAppendable { dir, is_on_disk: _ } => {
+            IndexSelector::NonAppendable { dir, memory: _ } => {
                 let dir = bool_dir(dir, field);
                 Ok(FieldIndexBuilder::BoolMmapIndex(
                     ImmutableBoolIndex::builder(&dir)?,
@@ -529,11 +530,11 @@ impl IndexSelector<'_> {
         // `MutableBoolIndex` and `ImmutableBoolIndex` share the same on-disk
         // format; stored mutability picks which in-memory wrapper to build.
         Ok(match (self, mutability) {
-            (IndexSelector::NonAppendable { dir, is_on_disk: _ }, IndexMutability::Immutable) => {
+            (IndexSelector::NonAppendable { dir, memory: _ }, IndexMutability::Immutable) => {
                 let dir = bool_dir(dir, field);
                 ImmutableBoolIndex::open(&dir, deleted_points)?.map(BoolIndex::Immutable)
             }
-            (IndexSelector::NonAppendable { dir, is_on_disk: _ }, IndexMutability::Mutable)
+            (IndexSelector::NonAppendable { dir, memory: _ }, IndexMutability::Mutable)
             | (IndexSelector::Appendable { dir }, _) => {
                 let dir = bool_dir(dir, field);
                 MutableBoolIndex::open(&dir, create_if_missing)?.map(BoolIndex::Mutable)

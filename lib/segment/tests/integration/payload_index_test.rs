@@ -1,3 +1,7 @@
+// Deprecated storage placement params (`on_disk`, `always_ram`, `on_disk_payload`) are still
+// handled here for backward compatibility with the new `memory` parameter
+#![allow(deprecated)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -153,6 +157,7 @@ impl TestSegments {
                 &JsonPath::new(INT_KEY_2),
                 Some(&FieldParams(PayloadSchemaParams::Integer(
                     IntegerIndexParams {
+                        memory: None,
                         r#type: IntegerIndexType::Integer,
                         lookup: Some(true),
                         range: Some(false),
@@ -170,6 +175,7 @@ impl TestSegments {
                 &JsonPath::new(INT_KEY_3),
                 Some(&FieldParams(PayloadSchemaParams::Integer(
                     IntegerIndexParams {
+                        memory: None,
                         r#type: IntegerIndexType::Integer,
                         lookup: Some(false),
                         range: Some(true),
@@ -308,6 +314,7 @@ impl TestSegments {
                 &JsonPath::new(STR_KEY),
                 Some(&FieldParams(PayloadSchemaParams::Keyword(
                     KeywordIndexParams {
+                        memory: None,
                         r#type: KeywordIndexType::Keyword,
                         is_tenant: None,
                         on_disk: Some(true),
@@ -323,6 +330,7 @@ impl TestSegments {
                 &JsonPath::new(INT_KEY),
                 Some(&FieldParams(PayloadSchemaParams::Integer(
                     IntegerIndexParams {
+                        memory: None,
                         r#type: IntegerIndexType::Integer,
                         lookup: Some(true),
                         range: Some(true),
@@ -340,6 +348,7 @@ impl TestSegments {
                 &JsonPath::new(INT_KEY_2),
                 Some(&FieldParams(PayloadSchemaParams::Integer(
                     IntegerIndexParams {
+                        memory: None,
                         r#type: IntegerIndexType::Integer,
                         lookup: Some(true),
                         range: Some(false),
@@ -357,6 +366,7 @@ impl TestSegments {
                 &JsonPath::new(INT_KEY_3),
                 Some(&FieldParams(PayloadSchemaParams::Integer(
                     IntegerIndexParams {
+                        memory: None,
                         r#type: IntegerIndexType::Integer,
                         lookup: Some(false),
                         range: Some(true),
@@ -373,6 +383,7 @@ impl TestSegments {
                 opnum,
                 &JsonPath::new(FLT_KEY),
                 Some(&FieldParams(PayloadSchemaParams::Float(FloatIndexParams {
+                    memory: None,
                     r#type: FloatIndexType::Float,
                     is_principal: None,
                     on_disk: Some(true),
