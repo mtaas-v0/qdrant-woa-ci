@@ -28,10 +28,27 @@ jobs:
 
       - name: Build and Test Natively
         run: |
-          cargo build --target aarch64-pc-windows-msvc
-          cargo test --target aarch64-pc-windows-msvc
+          cargo build --target aarch64-pc-windows-msvc --release
+          cargo test --target aarch64-pc-windows-msvc --release
 
       # Recursive list using PowerShell (default shell on Windows runners)
       - name: List all files recursively (PowerShell)
         if: always()
         run: Get-ChildItem -Recurse
+
+
+      #- name: Download scc
+      #  run: |
+      #    Invoke-WebRequest -Uri "https://github.com/boyter/scc/releases/download/v3.7.0/scc_Windows_x86_64.zip" -OutFile scc.zip
+      #    Expand-Archive scc.zip -DestinationPath .
+
+      #- name: Run scc
+      #  run: ./scc.exe .
+      # --- UPLOAD ARTIFACTS STEP ---
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          #name: testing-build       # The name of your downloadable zip file
+          path: target/                  # The directory or file path to upload
+          retention-days: 7            # Optional: How long to keep the files (Default: 90)
+          if-no-files-found: error     # Optional: Fails the build if 'dist' is missing
